@@ -1,0 +1,29 @@
+[
+    {
+        "Ordinal Number": "1.25.1",
+        "Matrix": [
+            [
+                -5
+            ]
+        ],
+        "Automorphism Group": [
+            2,
+            1
+        ],
+        "Generators": [
+            [
+                [
+                    -1
+                ],
+                [
+                    -1
+                ]
+            ]
+        ],
+        "Equivalent to its Transpose": true,
+        "Class Size": 2
+    },
+    {
+        "Total number of primitive matrices of size 1, and weight 25 is": 2
+    }
+]

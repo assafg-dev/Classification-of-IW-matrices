@@ -1,0 +1,7 @@
+There are 0 primitive equivalence classes of order 3 and weight 25.
+
+Transpose equivalence pairs: []
+
+Serial number   |    Automorphism group type    |      Generators (L,R)    |   Size of class
+--------------------------------------------------------------------------------------------------
+Total number of primitive matrices of size 3 and weight 25 is: 0

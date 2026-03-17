@@ -1,0 +1,13 @@
+There are 1 primitive equivalence classes of order 2 and weight 25.
+
+1
+[-4 -3]
+[-3  4]
+
+Transpose equivalence pairs: []
+
+Serial number   |    Automorphism group type    |      Generators (L,R)    |   Size of class
+--------------------------------------------------------------------------------------------------
+1     |      [4, 1]       |    [((-2, 1), (-2, 1))]   | 16   
+
+Total number of primitive matrices of size 2 and weight 25 is: 16

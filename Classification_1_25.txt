@@ -1,0 +1,12 @@
+There are 1 primitive equivalence classes of order 1 and weight 25.
+
+1
+[-5]
+
+Transpose equivalence pairs: []
+
+Serial number   |    Automorphism group type    |      Generators (L,R)    |   Size of class
+--------------------------------------------------------------------------------------------------
+1     |      [2, 1]       |    [((-1,), (-1,))]   | 2   
+
+Total number of primitive matrices of size 1 and weight 25 is: 2

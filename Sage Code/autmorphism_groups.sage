@@ -4,6 +4,8 @@ load('Classification.sage')
 load('automorphisms_via_graphs.sage')
 
 from itertools import product
+from collections import Counter
+
 
 def read_permutation_group(s):
     l=s.split('),')
@@ -14,15 +16,15 @@ def read_permutation_group(s):
 def approximate_automorphism_group(A,ngens=6):
     """ 
     Compute a subgroup of automorphisms of A by randomly adjoining ngens elements.
-        The result is probably the full automorphism group, but this is not guaranteed.
+        In most cases this is the The result is probably the full automorphism group, but this is not guaranteed. The function returns the left side of this automorphism subgroup. To find the right counterpart of each left item L, use L=find_R_from_L(A,L).
     """
     #b=min(b,A.ncols())
     n=A.nrows()
     In=identity_matrix(ZZ,n)
     Aut=[-In] # This is always an automorphism.
-    GeM=extended_automorphism_group(A)
+    GeM=extended_automorphism_group(A) # This is the permutation automorphism group of the extended matrix.
     for _ in range(ngens):
-        LR=an_automorphism(A,ExtAut=GeM) # Compute an automorphism of A (left and right side).
+        LR=an_automorphism(A,ExtAut=GeM) # Compute a random automorphism of A (left and right side).
         if not(LR):
             continue
         #print('automorphism found')
@@ -34,12 +36,18 @@ def approximate_automorphism_group(A,ngens=6):
     return HH
 
 def min_gen_set(G):
+    """
+    Find a minimal generating set of a matrix subgroup G of GL(n,ZZ). The function returns the list of generators in this minimal generating set. Wraps the similar function minimal_generating_set for permutation groups.
+    """
     H=G.as_permutation_group()
     gensH=H.minimal_generating_set()
     phi=H.hom(G)
     return list(map(phi,gensH))
 
 def mon_to_sign_perm(N):
+    """
+    Convert a sign monomial matrix N the line code of the corresponding signed permutation, which is the tuple of the form (s1*i1,s2*i2,...,sn*in), where si is the sign of the i-th column of N and ij is the index of the image of j.
+    """
     M=N
     if not(hasattr(N,'nrows')):
         M=N.matrix()
@@ -53,6 +61,9 @@ def mon_to_sign_perm(N):
     return tuple(char)
 
 def find_R_from_L(A,L,base=10):
+    """
+    Given a left side L of an automorphism of A, this function finds the right side R such that (L,R) is an automorphism of A. The function returns R.
+    """
     L1=L
     if hasattr(L,'matrix'):
         L1=L.matrix()
@@ -60,6 +71,9 @@ def find_R_from_L(A,L,base=10):
     return R
 
 def generating_set_of_automorphisms(A,G):
+    """
+    Return a list of signed permutations given in (left,right) pairs of line codes, generating the given  automorphism subgroup G of A (given by its left side). 
+    """
     min_gens=min_gen_set(G)
     Rights=[find_R_from_L(A,LL) for LL in min_gens]
     return [(mon_to_sign_perm(LL),mon_to_sign_perm(RR)) for LL,RR in zip(min_gens,Rights)]
@@ -68,11 +82,14 @@ def generating_set_of_automorphisms(A,G):
 #### Here we classify the IW matrices up to equivalence. ####
 
 def is_primitive(A):
+    """
+    Returns True if and only if A is a primitive matrix. Otherwise, it returns False.
+    """
     n=A.nrows()
     Gr=DiGraph(A)
     return Gr.is_connected()
 
-def test_equivalence_old(A,B,b=4,d=1):
+def test_equivalence_old(A,B,b=4,d=1):  ### This is an old version of the Hadamard equivalence test. Not used here.
     try:
         equiv=Are_Equivalent(A,B,b,d)
     except ValueError:
@@ -81,7 +98,13 @@ def test_equivalence_old(A,B,b=4,d=1):
         return equiv
     return False
 
-def test_equivalence(A,B,b=3):
+def test_equivalence(A,B,b=3,algorithm=None,certificate=False):
+    """
+    Test if A and B are Hadamard equivalent. The parameter b=3 is the code invariant depth computed for A and B to try to tell them apart. Only if the codes are the same, we proceed to the full test of isomorphism.look for an isomorphism. If certificate=True, return the isomorphism as a pair (L,R) of monomial matrices such that L*A*R.transpose()==B. The defualt algorithm=None uses the sage implementation of the graph isomorphism. We can set algorithm=='nauty', in which case the code invariant is not computed and the program uses the nauty software to decide this question. This option relies on nauty, without further proof, and is faster when applied to large matrices, e.g. of size 100.
+    """
+    if algorithm=='nauty':
+        isom=find_isomorphism_hadamard(A,B,certificate=certificate)
+        return isom
     isom=an_isomorphism(A,B)
     if isom:
         return isom
@@ -89,6 +112,14 @@ def test_equivalence(A,B,b=3):
         return False
 
 def classify_by_code(Matrices,b=4):
+    """
+    Given a list of matrices, we classify them by equating their code invariants of depth b. This is an initial step of classification. The function returns a dictionary of code to list of matrices. Subsequently we classify up to H-equivalence each list separately by the function classify_primitive_IW.
+
+    Input: Matrices = a list of IW matrices, 
+    b=4: The depth of the code invariant.
+     
+    Output: A dictionary of code to list.
+    """
     code_classes={}
     for A in Matrices:
         if is_primitive(A):
@@ -97,6 +128,16 @@ def classify_by_code(Matrices,b=4):
     return code_classes
 
 def classify_primitive_IW(n,w,b=3,exhaustive_list=False, max_entry=Infinity):
+    """
+    classify all primitive IW matrices of order n and weight w, up to H-equivalence.
+     Input: n = order,
+        w = weight,
+        b = depth of code invariant, set to 3 for efficiency.
+        exhaustive_list = List of matrices to classify. Could be some partial list, e.g. those of the same code invariant. If False, we use the classification procedure ExhaustiveListIW, and classify all the IW matrices of the given parameters.
+        max_entry = maximum entry in absolute value that is allowed to appear in the matrix. By default there is no limit. For classical weighing matrices set max_entry=1.
+
+    Output: A list of representatives of the equivalence classes, one per each class.
+    """
     code_classes=classify_by_code(ExhaustiveListIW(n,w,max_entry=max_entry) if not(exhaustive_list) else exhaustive_list,b)
     #print(f'Number of code classes: {len(code_classes)}')
     equiv_classes=[]
@@ -118,6 +159,14 @@ def classify_primitive_IW(n,w,b=3,exhaustive_list=False, max_entry=Infinity):
     return equiv_classes
 
 def transpose_equiv_classes(Classes,b=3):
+    """
+    Input: Classes = a list of representatives of equivalence classes of primitive IW matrices, one per each class. 
+    b = depth of code invariant, used for efficiency.
+
+    Output: A list of pairs of indices (i,j).
+
+    It is assumed that the elements in 'Classes' are pairwise H-inequivalent. A pair (i,j) in the output list means that Classes[i] and Classes[j].transpose() are H-equivalent.
+    """
     b=min(b,Classes[0].ncols())
     Codes=[nCount(A,b) for A in Classes]
     CodesT=[nCount(A.transpose(),b) for A in Classes]
@@ -135,7 +184,7 @@ def transpose_equiv_classes(Classes,b=3):
 
 
 
-def classify_primitive_IW_old(n,w,b=4,d=1,exhaustive_list=False):
+def classify_primitive_IW_old(n,w,b=4,d=1,exhaustive_list=False): ##This is the old implementation of the IW classification. Use classify_primitive_IW instead. 
     Classes=[]
     is_equiv_to_transpose=[]
     if not(exhaustive_list):
@@ -161,9 +210,13 @@ def classify_primitive_IW_old(n,w,b=4,d=1,exhaustive_list=False):
     return  list(zip(Classes,is_equiv_to_transpose))
 
 
-#### From here below we are working on proving that we have the full automorphism group. #####
+#### The following procedures are for proving that an automorphism subgroup is complete. #####
 
 def orbits_single(G): ## G is given as a nxn monomial matrix group. The function returns the list of orbits of G as acting on the set {0,...,n-1}.
+    """
+    Input: A group of monomial matrices.
+    Output: The list of orbits of the action of G on {0,...,n-1} (ignoring signs). Given as a list of sets.
+    """
     I=G.an_element().matrix()
     n=I.nrows()
     X=list(range(n))
@@ -182,7 +235,12 @@ def orbits_single(G): ## G is given as a nxn monomial matrix group. The function
         Orbits.append(orbit)
     return Orbits
 
-def orbits(G,r): ## G is given as a nxn monomial matrix group. The function returns the list of orbits of G as acting on the set {0,...,n-1}^r.
+def orbits(G,r):
+    """
+     Input: G = A group G of monomial matrices;
+            r = a positive integer. 
+    Output: The list of orbits of the action of G on {0,...,n-1}^r (ignoring signs), given as a list of sets.
+    """
     if type(G)==list:
         G=MatrixGroup(G)
     I=G.an_element().matrix()
@@ -210,6 +268,11 @@ def orbits(G,r): ## G is given as a nxn monomial matrix group. The function retu
     return Orbits
 
 def stabilizer(G,v): ## G is given as a nxn monomial matrix group and v is a vector of length n. The function returns the stabilizer of v in G.
+    """
+    Input: G = A group G of nxnmonomial matrices;
+            v = a vector of length n; 
+    Output: The stabilizer in G of the vector v (ignoring signs in G).
+    """
     Stab=[] ## Stab will be a list of generators of the stabilizer
     for g in G:
         in_stab=True
@@ -224,13 +287,18 @@ def stabilizer(G,v): ## G is given as a nxn monomial matrix group and v is a vec
             Stab.append(g.matrix())
     return Stab
 
-def all_sign_mat(n): #This gives the full list of all signature matrices up to order n.
+def all_sign_mat(n):
+    """
+    Input: n = a positive integer.
+    Output: A list of all n x n diagonal matrices with entries in {1,-1}.
+    """ 
     H=HadamardSpace(n)
     return [-diagonal_matrix(h) for h in H]+[diagonal_matrix(h) for h in H]
 
 def all_permutations(L1,L2):
     """
-    Given two lists L1 and L2 of the same length, this function returns all permutations pi such that pi(L1)=L2, if such permutations exist. Otherwise it returns False.
+    Input: L1 and L2 are two lists of the same length.
+    Output: All permutations pi such that pi(L1)=L2. If no such permutations exist, return False.
     """
     L1s=copy(L1)
     L2s=copy(L2)
@@ -268,6 +336,13 @@ def all_permutations(L1,L2):
     return perms
 
 def all_possible_isomorphisms_preserving_initial_up_to_signs(A,B,b,base=10):
+    """
+    Input: 
+        A and B are two matrices of the same size, with the same first b rows. base is the base used for encoding vectors as integers.
+
+    Output: 
+        A list of all isomorphisms (L,R) such that L*A*R.transpose()==B, and L is diagonal in restriction to the first b coordinates.
+    """
     H=HadamardSpace(b)
     Isoms=[]
     n=A.ncols()
@@ -291,6 +366,12 @@ def all_possible_isomorphisms_preserving_initial_up_to_signs(A,B,b,base=10):
 def all_possible_isomorphisms_preserving_initial(A,B,b,base=10):
     """
     Given two matrices A and B of the same size, with the same first b rows, this function return all possible isomorphisms between A and B, which act as the identity on these first rows. In the realm of many repetitions of columns in A[:b]=B[:b], the function is cutting down the number of permutations by looking for isomorphisms between $A[b:,I]$ and $B[b:,I]$ for each group I of columns of A[:b] with the same column.
+
+    Input: 
+    
+        A and B are two matrices of the same size, with the same first b rows. base is the base used for encoding vectors as integers.
+
+    Output: A list of all isomorphisms (L,R) such that L*A*R.transpose()==B, and L is the identity in restriction to the first b coordinates.
     """
     n=A.nrows()
     m=A.ncols()
@@ -355,6 +436,15 @@ def all_possible_isomorphisms_preserving_initial(A,B,b,base=10):
 
 
 def minimal_fixed_row_element(A,base=10,permutations=False): #This returns the minimal matrix in the class of A, by the row lex ordering.
+    """
+    Input: A = an integer matrix; 
+
+    base = 10: a positive integer serving as a base for the numerical encoding of integer vectors. 
+
+    permutations = False (a boolean).
+
+    Output: The minimal matrix in the class of A according to the row lex ordering. If permutations=True, also return the number of monomial matrices M such that M*A is column equivalent to the minimal matrix.
+    """
     m=A.nrows(); n=A.ncols()
     Mon=all_sign_mat(m)
     CodeMin=n*[base^10]
@@ -374,8 +464,14 @@ def minimal_fixed_row_element(A,base=10,permutations=False): #This returns the m
     return MinMat
 
 def perm_between(L1,L2):
+    """
+    Input: L1 and L2 are two lists of the same length.
+
+    Output: a permutation pi such that pi(L1)=L2. If no such permutations exists return False.
+    The function all_permutations(L1,L2) returns all such permutations. 
+    """
     assert len(L1)==len(L2)
-    if not( set(L1)==set(L2)):
+    if not( Counter(L1)==Counter(L2)):
         return False
     L2c=copy(L2)
     pil=[]
@@ -388,6 +484,18 @@ def perm_between(L1,L2):
     return(pi)
 
 def find_L_from_R(A,R,base=10):
+    """
+    Input: 
+    
+           A = an integer matrix;
+
+           R = a monomial matrix; 
+
+           base = 10, a positive integer serving as a base for the numerical encoding of integer vectors.
+
+    Output: Find a monomial R such that (L,R) is an automorphism of A, i.e. L*A*R.transpose()==A. If no such L exists, return False. R may not be unique.
+    """
+    
     n=A.nrows()
     AR=A*R.transpose()
     nA,sA=normAbove(A.transpose(),signs=True)
@@ -402,7 +510,7 @@ def find_L_from_R(A,R,base=10):
     return L
 
 
-def find_isomorphism_with_trivial_row_order(A,B,base=10):
+def find_isomorphism_with_trivial_row_order(A,B,base=10): ### This is an old function and is not used any more.
     m=A.nrows()
     nB=NormalizeByColumns(B,base)
     mB,sB=normAbove(B,signs=True)
@@ -433,7 +541,7 @@ def find_isomorphism_with_trivial_row_order(A,B,base=10):
                     Isoms.append((M,diagonal_matrix(sA)*pi.matrix()*diagonal_matrix(sB)))
     return Isoms
 
-def does_map(L,I,J):
+def does_map(L,I,J): ### This is an old function and is not used any more.
     for ii,jj in zip(I,J):
         ci=L.column(ii)
         ci=sum(ci)*ci
@@ -444,6 +552,17 @@ def does_map(L,I,J):
         
 
 def test_if_I_maps_to_J(A,I,J,base=10):
+    """
+    Input: 
+    
+           A = an integer nxn matrix;
+
+           I and J are two lists of the same length taken from the set {0, 1, ..., n-1}.
+
+           base =10 is used for encoding vectors as integers.
+
+    Output: If there exists an isomorphism (L,R) such that L*A*R.transpose()==A and L maps the rows in I to the rows in J, then return True, the number of such isomorphisms, and a list of these isomorphisms. Otherwise, return False.
+    """
     B=A[I,:]
     C=A[J,:]
     BC=A.delete_rows(I)
@@ -468,7 +587,7 @@ def test_if_I_maps_to_J(A,I,J,base=10):
     
 
 
-def test_if_I_maps_to_J_old(A,I,J,base=10):
+def test_if_I_maps_to_J_old(A,I,J,base=10): ### This is an old function and is not used any more. It is replaced by test_if_I_maps_to_J, which is more efficient.
     B=A[I,:]
     C=A[J,:]
     if nCount(B,3)!=nCount(C,3):
@@ -502,6 +621,21 @@ def test_if_I_maps_to_J_old(A,I,J,base=10):
     
 def prove_full_automorphism_group(A,G,base=10,orbs=3): #A is the IW and G is a subgroup of its automorphism group. The function returns True if G is the full automorphism group of A.
     #m=A.nrows()
+    """
+    This procedure proves or disproves that a given automorphism group is complete.
+
+    Input: 
+    
+           A = an integer matrix; 
+
+           G = a group of the automorphism group of A, given by its left side; 
+
+           base = 10 is used for encoding vectors as integers; 
+
+           orbs = an integer used internally in the program and can be set up to achieve more efficiency. The larger orbs is, the more time the procedure takes, but it finds faster a new automorphisms if there are any.
+
+    Output: If G is the full automorphism group of A, return True. Otherwise, return a new automorphism L not in G.
+    """
     orbs=min(orbs,A.nrows())
     Orbs=orbits(G,orbs)
     #for orb in Orbs:
@@ -526,20 +660,51 @@ def prove_full_automorphism_group(A,G,base=10,orbs=3): #A is the IW and G is a s
         J=list(Orbs[j])[0]
         t=test_if_I_maps_to_J(A,I,J)
         if t:
-            print('fusion')
+            #print('fusion')
             #print('The automorphism group is larger')
             #print(t)
             L,R=t[2][0]
             return L
     return True
 
-def automorphism_group(A,proof=True,base=10,ngens=6,orbs=3,algorithm=None):
+#### The main procedure for computing the automorphism group of an IW matrix.
+
+def automorphism_group(A,proof=True,base=10,ngens=6,orbs=3,algorithm=None,id=False):
+    """
+    Compute the automorphism group of an IW matrix A. The function returns a subgroup of the automorphism group, which is probably the full automorphism group, but this is not guaranteed. If proof=True, the function provably returns the full automorphism group. The output is given as a group of monomial matrices, given by their left side. To find the right counterpart of each left item L, use L=find_R_from_L(A,L).
+
+        Input: 
+        
+               A = an integer matrix;
+
+               proof=True: return provably the full automorphism group. If False, may return a proper subgroup. 
+
+               base=10: is used for encoding vectors as integers.
+
+               ngens=6: generate ngens random automorphisms. The larger ngens is, the more probable it returns the full group. 
+
+               orbs=3: is used internally in the program and can be set up to achieve more efficiency in proving the completeness of the found group. 
+
+               algorithm=None: if None, we use the Sage implementation of the graph isomorphism and automorphism problem. Algorithm='nauty' uses the external nauty package (if installed), which is much faster. In this case we do not use the option proof=True.
+
+               id=False: if True, the function returns also a string which is a 'nauty' id of the Hadamard graph of A.
+
+        Output: The automorphism group of A, given by its left projection. If id=True, also return the 'nauty' id of the Hadamard graph of A.
+    
+    
+    """
     if algorithm=='nauty':
-        G=automorphism_group_hadamard(A)
+        if id:
+            G,Id=automorphism_group_hadamard(A,id=True)
+        else:
+            G=automorphism_group_hadamard(A,id=id)
     else:
         G=approximate_automorphism_group(A,ngens=ngens)
-    if not(proof):
-        return G
+    if not(proof) or algorithm=='nauty':
+        if id and algorithm=='nauty':
+            return G,Id
+        else:
+            return G
     GG=GL(A.nrows(),ZZ)
     while True:
         L=prove_full_automorphism_group(A,G,base=base,orbs=orbs)
@@ -550,8 +715,23 @@ def automorphism_group(A,proof=True,base=10,ngens=6,orbs=3,algorithm=None):
 
 
 
-def find_symmetric_and_and_antisymmetric_rep(A,b=3,Aut=False,ngens=5,All=False,base=10,proof=False):
-    T=test_equivalence(A,A.transpose(),b=b) ##TODO: Switch to graph isomorphism method.
+def find_symmetric_and_and_antisymmetric_rep(A,b=3,Aut=False,ngens=5,All=False,base=10,proof=False,algorithm=None):
+    """
+    Find a symmetric and an antisymmetric matrix in the class of a matrix. Can also return exhaustive lists of both kinds. 
+
+    Input: 
+           
+           A = an integer matrix;
+
+           b = 3: depth of code invariant, used for efficiency;
+
+           Aut = The automorphism group of A if it was computed. If Aut=False, compute internally the automorphism group.
+
+           ngens,base,proof and algorithm: These parameters are used for computing the automorphism group if we set Aut=False. See automorphism_group for more details.
+
+    Output: If All=False, return a pair (symA,anti_symA) of symmetric and antisymmetric matrices in the class of A. If one of which does not exist, return symA or anti_symA=False. If All=True, return a pair (AllSym,AllAntiSym) of exhaustive lists. Such a list may still contain SH-equivalent matrices.
+    """
+    T=test_equivalence(A,A.transpose(),b=b,algorithm=algorithm,certificate=True) ##TODO: Switch to graph isomorphism method.
     if not(T):
         raise ValueError('The class in not symmetric')
     L,R=T
@@ -586,6 +766,22 @@ def find_symmetric_and_and_antisymmetric_rep(A,b=3,Aut=False,ngens=5,All=False,b
     return symA,anti_symA
 
 def aut_sym(A,b=3,ngens=5,base=10,Aut=False):
+    """
+    Find the symmetric automorphism group of the matrix A. 
+
+    Input: 
+    
+           A = an IW matrix.
+
+           b = depth of code invariant, used for efficiency;
+
+           base=10: is used for encoding vectors as integers. For entries in [-M,M] use base=2*M+1.
+
+           Aut = The ordinary automorphism group. By default set to False and then computed by the procedure.
+
+    Output: The monomial matrix group of symmetric automorphisms given by its left projection.
+
+    """
     AutSym=[]
     if not(Aut):
         Aut=automorphism_group(A,ngens=ngens,base=base)
@@ -601,6 +797,23 @@ def aut_sym(A,b=3,ngens=5,base=10,Aut=False):
     return Aut.subgroup(AutSym)
 
 def count_sym_and_antisym_matrices(A,b=3,Aut=False,ngens=5,base=10):
+    """
+    Count how many symmetric and antisymmetric matrices are in the H-equivalence class of A.
+
+    Input: 
+
+           A = an IW matrix.
+
+           b = 3: the depth of code invariant, used for efficiency;
+
+           base=10: is used for encoding vectors as integers. For entries in [-M,M] use base=2*M+1.
+
+           Aut = False: The ordinary automorphism group. By default set to False and then computed by the procedure.
+
+           ngens=5: Used in the course of computing the automorphism group and its value affects the efficiency.
+
+    Output: A pair (ns,na) of integers that counts the number of symmetric and antisymmetric matrices.
+    """
     if not(Aut):
         Aut=automorphism_group(A,ngens=ngens,base=base)
     n=A.nrows()
@@ -637,12 +850,30 @@ def count_sym_and_antisym_matrices(A,b=3,Aut=False,ngens=5,base=10):
     return nsym,nantisym
 
 
-def classification_list_symm_and_antisymm(M,Aut=False):
+def classification_list_symm_and_antisymm(M,Aut=False,proof=True,algorithm=None):
+    """
+        Classify all symmetric and antisymmetric matrices up to symmetric equivalence in the H-equivalence class of an IW matrix M.
+
+        Input:
+
+            M = An IW matrix.
+
+            Aut = False: The ordinary automorphism group. By default set to False and then computed by the procedure.
+
+            proof = True: provably supply the answer when Aut = False, in which case the function is asked to compute a provably correct automorphism group.
+
+            algorithm = None: Use the sage implementation for graph isomorphism functionality. If algorithm='nauty', use the 'natuy' package (if installed). In this option always proof=False.
+
+        Output: A pair (Ls,La) of two lists. Ls is a classification list for symmetric matrices and La is a classification list for antisymmetric matrices.
+    """
     if not(Aut):
-        GM=automorphism_group(M)
+        if algorithm=='nauty':
+            GM=automorphism_group_hadamard(M)
+        else:
+            GM=automorphism_group(M)
     else:
         GM=Aut
-    try: S,AS=find_symmetric_and_and_antisymmetric_rep(M,All=True)
+    try: S,AS=find_symmetric_and_and_antisymmetric_rep(M,Aut=GM, All=True,algorithm=algorithm)
     except ValueError:
         return ([],[])
     SymClasses=[]
@@ -651,7 +882,7 @@ def classification_list_symm_and_antisymm(M,Aut=False):
         A,L=S[i]
         G=[L*g*L.transpose() for g in GM]
         SA=set()
-        print(f'{i=},len(sym)={len(SymClasses)}')
+        #print(f'{i=},len(sym)={len(SymClasses)}')
         for P in G:
             Q=find_R_from_L(A,P)
             M=Q.transpose()*P
@@ -694,6 +925,26 @@ def classification_list_symm_and_antisymm(M,Aut=False):
 ###########  Main classification printing data ##############
 
 def print_classification_data(n,w,b=3,base=10,Classes=False):
+    """
+    Print to the console the classification data of primitive IW(n,w). Also write the data to a text file named "Classification_n_w.txt".
+    
+    The data includes the following: 
+
+        1) Number of H-equivalence classes.
+
+        2) Of which Transpose H-equivalence pairs (index of).
+
+        3) A table of automorphism groups (given by GAP id), generators, and the size of the class.
+
+    Input: 
+        n,w = The size and weight.
+
+        b = 3: the depth of code invariant, used for efficiency;
+
+        base=10: is used for encoding vectors as integers. For entries in [-M,M] use base=2*M+1.
+
+        Classes = A classification list of primitive IW(n,w). If Classes=False (Default) compute the classification list internally.
+    """
     fl=open(f'Classification_{n}_{w}.txt','w')
     if not(Classes):
         Classes=classify_primitive_IW(n,w,b)
@@ -724,13 +975,42 @@ def print_classification_data(n,w,b=3,base=10,Classes=False):
         total_prmitive+=class_size
         if i+1 in T_keep:
             total_prmitive+=class_size
-        #fl.write(f'{i+1}     |      {Gid}       |'+ f'{f' {gens}   | {class_size}':{'>'}^{250}}' + '\n\n')
-        #print(f'{i+1}     |      {Gid}       |'+ f'{f' {gens}   | {class_size}':{'>'}^{250}}' + '\n\n')
+        fl.write(f'{i+1}     |      {Gid}       |'+ f'{f' {gens}   | {class_size}':{'>'}^{250}}' + '\n\n')
+        print(f'{i+1}     |      {Gid}       |'+ f'{f' {gens}   | {class_size}':{'>'}^{250}}' + '\n\n')
     fl.write(f'Total number of primitive matrices of size {n} and weight {w} is: {total_prmitive}\n')
     fl.close()
 
 
 def print_classification_data_json(n,w,b=3,base=10,Classes=False,max_entry=Infinity):
+    """
+    Generate a .json file of classification data of primitive IW(n,w) up to TH-equivalence. The output file will be "Classification_n_w.json", or "Classification_n_w_max_m.json" if the entries of the matrix are limited to the interval [-m,m]. 
+
+    The json file will include the following fields:
+
+    1) "Ordinal Number": The serial number of the class given by n.w.j where j in the serial number of the class, starting from j=1.
+
+    2) "Matrix": The list of rows of the representing matrix of the class.
+
+    3) "Automorphism Group": The automorphism group type of the class given by a GAP id (a pair of integers: [o,r] where o is the cardinality and r is the serial number in the GAP taxonomy).
+
+    4) "Generators": A list of pairs (L,R) that generate to automorphism group. L and R are given by line codes of monomial matrices and are vectors of integers. 
+
+    5) "Class Size": An integer which is the size of the class.
+
+    And a final field  
+    6) The total count of primitive IW(n,w).
+
+    Input:
+        n,w = The size and weight.
+
+        b = 3: the depth of code invariant, used for efficiency;
+
+        base=10: is used for encoding vectors as integers. For entries in [-M,M] use base=2*M+1.
+
+        Classes = A classification list of primitive IW(n,w). If Classes=False (Default) compute the classification list internally.
+
+        max_entry: Limit the entries of the matrix to be in the interval [-max_entry,max_entry].
+    """
     import json
     def serialize_Integer(obj):
         if isinstance(obj, Integer) or isinstance(obj, Rational):
